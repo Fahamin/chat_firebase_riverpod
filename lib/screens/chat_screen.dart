@@ -1,22 +1,32 @@
+// lib/screens/chat_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
-import '../services/auth_service.dart';
+import '../models/app_user.dart';
+import '../models/message_model.dart';
 import '../services/chat_service.dart';
+import '../services/auth_service.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
-  const ChatScreen({super.key});
+  final String chatId;
+  final AppUser otherUser;
+
+  const ChatScreen({
+    super.key,
+    required this.chatId,
+    required this.otherUser,
+  });
 
   @override
   ConsumerState<ChatScreen> createState() => _ChatScreenState();
 }
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
-  final messageController = TextEditingController();
+  final TextEditingController _messageController = TextEditingController();
 
   @override
   void dispose() {
-    messageController.dispose();
+    _messageController.dispose();
     super.dispose();
   }
 
@@ -24,64 +34,61 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final chatService = ref.watch(chatServiceProvider);
     final authService = ref.watch(authServiceProvider);
-    final user = authService.getCurrentUser();
+    final currentUser = authService.getCurrentUser();
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Chat'),
-        actions: [
-          IconButton(
-            onPressed: () {
-              authService.signOut();
-            },
-            icon: const Icon(Icons.logout),
-          ),
-        ],
+        title: Text(widget.otherUser.displayName ?? 'Chat'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.pop(context),
+        ),
       ),
       body: Column(
         children: [
           Expanded(
-            child: StreamBuilder(
-              stream: chatService.getMessages(),
+            child: StreamBuilder<List<Message>>(
+              stream: chatService.getMessages(widget.chatId),
               builder: (context, snapshot) {
                 if (snapshot.hasError) {
-                  return Center(child: Text('Error${snapshot.error}'));
+                  return Center(child: Text('Error: ${snapshot.error}'));
                 }
+
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
+
                 final messages = snapshot.data ?? [];
+
                 return ListView.builder(
+                  reverse: true,
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
                     final message = messages[index];
-                    final isme = message.senderId == user?.uid;
+                    final isMe = message.senderId == currentUser?.uid;
+
                     return ListTile(
                       title: Align(
-                        alignment: isme
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
+                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                         child: Container(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: isme ? Colors.blue : Colors.grey,
-                            borderRadius: BorderRadius.circular(8),
+                            color: isMe ? Colors.blue : Colors.grey,
+                            borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
                             message.text,
                             style: TextStyle(
-                              color: isme ? Colors.white : Colors.black,
+                              color: isMe ? Colors.white : Colors.black,
                             ),
                           ),
                         ),
                       ),
                       subtitle: Align(
-                        alignment: isme
-                            ? Alignment.centerRight
-                            : Alignment.centerLeft,
+                        alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
                         child: Text(
                           '${message.timestamp.hour}:${message.timestamp.minute}',
-                          style: const TextStyle(fontSize: 12),
+                          style: const TextStyle(fontSize: 10),
                         ),
                       ),
                     );
@@ -96,22 +103,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               children: [
                 Expanded(
                   child: TextField(
-                    controller: messageController,
+                    controller: _messageController,
                     decoration: const InputDecoration(
-                      hintText: 'Enter a message',
+                      hintText: 'মেসেজ লিখুন...',
+                      border: OutlineInputBorder(),
                     ),
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.send),
                   onPressed: () async {
-                    if (messageController.text.trim().isNotEmpty &&
-                        user != null) {
+                    if (_messageController.text.trim().isNotEmpty && currentUser != null) {
                       await chatService.sendMessage(
-                        messageController.text.trim(),
-                        user.uid,
+                        widget.chatId,
+                        _messageController.text.trim(),
+                        currentUser.uid,
                       );
-                      messageController.clear();
+                      _messageController.clear();
                     }
                   },
                 ),
